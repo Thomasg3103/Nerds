@@ -11,7 +11,7 @@ router.get('/sets', async (_req, res) => {
     const { data: cached, error } = await supabase
       .from('pokemon_sets')
       .select('*')
-      .order('release_date', { ascending: true })
+      .order('release_date', { ascending: false })
 
     if (error) throw error
 
@@ -33,9 +33,28 @@ router.get('/sets', async (_req, res) => {
     const { error: upsertError } = await supabase.from('pokemon_sets').upsert(rows)
     if (upsertError) throw upsertError
 
-    res.json(rows)
+    // Return newest first, matching the cached query order.
+    res.json([...rows].sort((a, b) => (b.release_date ?? '').localeCompare(a.release_date ?? '')))
   } catch (err) {
     console.error('[GET /api/pokemon/sets]', err.message)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/pokemon/sets/:setId
+// Returns metadata for a single set (used by the set detail page).
+router.get('/sets/:setId', async (req, res) => {
+  const { setId } = req.params
+  try {
+    const { data, error } = await supabase
+      .from('pokemon_sets')
+      .select('*')
+      .eq('id', setId)
+      .single()
+    if (error) throw error
+    res.json(data)
+  } catch (err) {
+    console.error(`[GET /api/pokemon/sets/${req.params.setId}]`, err.message)
     res.status(500).json({ error: err.message })
   }
 })

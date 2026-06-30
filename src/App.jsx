@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import Navbar from './components/Navbar'
 import Dashboard from './pages/Dashboard'
 import PokemonCollection from './pages/PokemonCollection'
+import PokemonSet from './pages/PokemonSet'
 import GamesCollection from './pages/GamesCollection'
 
 export default function App() {
@@ -13,6 +14,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/pokemon" element={<PokemonCollection />} />
+            <Route path="/pokemon/:setId" element={<PokemonSet />} />
             <Route path="/games" element={<GamesCollection />} />
           </Routes>
         </main>

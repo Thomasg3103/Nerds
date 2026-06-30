@@ -1,45 +1,76 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 
-// Placeholder data — will be replaced by Pokemon TCG API responses in Phase 1 backend.
-const PLACEHOLDER_SETS = [
-  { id: 'base1', name: 'Base Set',    total: 102 },
-  { id: 'gym1',  name: 'Gym Heroes', total: 132 },
-  { id: 'neo1',  name: 'Neo Genesis', total: 111 },
-]
+const API = 'http://localhost:3001'
 
 export default function PokemonCollection() {
-  const [selectedSet, setSelectedSet] = useState(null)
+  const [sets, setSets] = useState([])
+  const [owned, setOwned] = useState([])
+  const [query, setQuery] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    Promise.all([
+      fetch(`${API}/api/pokemon/sets`).then(r => r.json()),
+      fetch(`${API}/api/pokemon/owned`).then(r => r.json()),
+    ])
+      .then(([setsData, ownedData]) => {
+        setSets(Array.isArray(setsData) ? setsData : [])
+        setOwned(Array.isArray(ownedData) ? ownedData : [])
+      })
+      .catch(err => setError(err.message))
+      .finally(() => setLoading(false))
+  }, [])
+
+  function ownedCountForSet(setId) {
+    return owned.filter(r => r.items?.set_name === setId).length
+  }
+
+  const filtered = sets.filter(s =>
+    s.name.toLowerCase().includes(query.toLowerCase())
+  )
+
+  if (loading) return <div className="page"><p className="page-sub">Loading sets…</p></div>
+  if (error)   return <div className="page"><p className="fetch-error">Error: {error}</p></div>
 
   return (
     <div className="page">
       <h1 className="page-title">Pokémon Cards</h1>
-      <p className="page-sub">Browse sets and track which cards you own.</p>
+      <p className="page-sub">{sets.length} sets</p>
 
-      <div className="set-grid">
-        {PLACEHOLDER_SETS.map((set) => (
-          <button
-            key={set.id}
-            className={`set-card ${selectedSet?.id === set.id ? 'selected' : ''}`}
-            onClick={() => setSelectedSet(set)}
-          >
-            <span className="set-name">{set.name}</span>
-            <span className="set-total">{set.total} cards</span>
-            <div className="progress-bar">
-              <div className="progress-fill" style={{ width: '0%' }} />
-            </div>
-            <span className="progress-label">0 / {set.total} owned</span>
-          </button>
-        ))}
+      <input
+        className="search-input"
+        type="text"
+        placeholder="Search sets…"
+        value={query}
+        onChange={e => setQuery(e.target.value)}
+      />
+
+      <div className="set-grid set-grid-top">
+        {filtered.map((set) => {
+          const count = ownedCountForSet(set.id)
+          const pct = set.total > 0 ? (count / set.total) * 100 : 0
+          return (
+            <button
+              key={set.id}
+              className="set-card"
+              onClick={() => navigate(`/pokemon/${set.id}`)}
+            >
+              {set.logo_url && (
+                <img src={set.logo_url} alt={set.name} className="set-logo" />
+              )}
+              <span className="set-name">{set.name}</span>
+              <span className="set-total">{set.series} · {set.total} cards</span>
+              <div className="progress-bar">
+                <div className="progress-fill" style={{ width: `${pct}%` }} />
+              </div>
+              <span className="progress-label">{count} / {set.total} owned</span>
+            </button>
+          )
+        })}
       </div>
-
-      {selectedSet && (
-        <div className="card-panel">
-          <h2>{selectedSet.name}</h2>
-          <p className="placeholder-note">
-            Card list loads here once the Pokémon TCG API is wired up (Phase 1 backend).
-          </p>
-        </div>
-      )}
     </div>
   )
 }
