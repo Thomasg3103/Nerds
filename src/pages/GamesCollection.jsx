@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
+import { apiFetch } from '../lib/api'
 
-const API = 'http://localhost:3001'
 const STATUSES = ['All', 'Backlog', 'In Progress', 'Complete', 'Platinumed']
 
 function statusClass(status) {
@@ -8,18 +8,16 @@ function statusClass(status) {
 }
 
 export default function GamesCollection() {
-  const [owned, setOwned] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-
-  const [query, setQuery] = useState('')
-  const [results, setResults] = useState([])
+  const [owned, setOwned]       = useState([])
+  const [loading, setLoading]   = useState(true)
+  const [error, setError]       = useState(null)
+  const [query, setQuery]       = useState('')
+  const [results, setResults]   = useState([])
   const [searching, setSearching] = useState(false)
-
   const [activeFilter, setActiveFilter] = useState('All')
 
   useEffect(() => {
-    fetch(`${API}/api/games/owned`)
+    apiFetch('/api/games/owned')
       .then(r => r.json())
       .then(data => setOwned(Array.isArray(data) ? data : []))
       .catch(err => setError(err.message))
@@ -28,13 +26,10 @@ export default function GamesCollection() {
 
   // Debounced live search — waits 400ms after typing stops before hitting RAWG.
   useEffect(() => {
-    if (query.trim().length < 2) {
-      setResults([])
-      return
-    }
+    if (query.trim().length < 2) { setResults([]); return }
     setSearching(true)
     const timer = setTimeout(() => {
-      fetch(`${API}/api/games/search?q=${encodeURIComponent(query)}`)
+      apiFetch(`/api/games/search?q=${encodeURIComponent(query)}`)
         .then(r => r.json())
         .then(data => setResults(Array.isArray(data) ? data : []))
         .catch(err => setError(err.message))
@@ -48,9 +43,8 @@ export default function GamesCollection() {
   }
 
   async function addGame(game) {
-    const res = await fetch(`${API}/api/games/own`, {
+    const res    = await apiFetch('/api/games/own', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(game),
     })
     const record = await res.json()
@@ -59,24 +53,22 @@ export default function GamesCollection() {
 
   async function updateStatus(record, status) {
     setOwned(prev => prev.map(r => r.item_id === record.item_id ? { ...r, condition_status: status } : r))
-    await fetch(`${API}/api/games/own/${record.item_id}`, {
+    await apiFetch(`/api/games/own/${record.item_id}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status }),
     })
   }
 
   async function updateHours(record, hours) {
     setOwned(prev => prev.map(r => r.item_id === record.item_id ? { ...r, hours_played: hours } : r))
-    await fetch(`${API}/api/games/own/${record.item_id}`, {
+    await apiFetch(`/api/games/own/${record.item_id}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ hours_played: hours }),
     })
   }
 
   async function removeGame(record) {
-    await fetch(`${API}/api/games/own/${record.item_id}`, { method: 'DELETE' })
+    await apiFetch(`/api/games/own/${record.item_id}`, { method: 'DELETE' })
     setOwned(prev => prev.filter(r => r.item_id !== record.item_id))
   }
 
@@ -95,9 +87,9 @@ export default function GamesCollection() {
         <input
           className="search-input"
           type="text"
-          placeholder="Search for a game…"
+          placeholder="Search for a game to add…"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={e => setQuery(e.target.value)}
         />
       </div>
 
@@ -139,6 +131,11 @@ export default function GamesCollection() {
             onClick={() => setActiveFilter(status)}
           >
             {status}
+            {status !== 'All' && (
+              <span className="filter-count">
+                {owned.filter(r => r.condition_status === status).length}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -161,7 +158,7 @@ export default function GamesCollection() {
                 <select
                   className={`status-select status-${statusClass(record.condition_status)}`}
                   value={record.condition_status}
-                  onChange={(e) => updateStatus(record, e.target.value)}
+                  onChange={e => updateStatus(record, e.target.value)}
                 >
                   {STATUSES.filter(s => s !== 'All').map(s => (
                     <option key={s} value={s}>{s}</option>
@@ -174,7 +171,7 @@ export default function GamesCollection() {
                     min="0"
                     className="hours-input"
                     value={record.hours_played ?? ''}
-                    onChange={(e) => updateHours(record, e.target.value === '' ? null : Number(e.target.value))}
+                    onChange={e => updateHours(record, e.target.value === '' ? null : Number(e.target.value))}
                   />
                 </label>
                 <button className="remove-btn" onClick={() => removeGame(record)}>Remove</button>

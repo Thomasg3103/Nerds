@@ -3,6 +3,7 @@ import cors from 'cors'
 import 'dotenv/config'
 import pokemonRouter from './routes/pokemon.js'
 import gamesRouter from './routes/games.js'
+import statsRouter from './routes/stats.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -12,6 +13,7 @@ app.use(express.json())
 
 app.use('/api/pokemon', pokemonRouter)
 app.use('/api/games', gamesRouter)
+app.use('/api/stats', statsRouter)
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
 

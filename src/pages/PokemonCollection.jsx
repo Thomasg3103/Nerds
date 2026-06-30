@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-
-const API = 'http://localhost:3001'
+import { apiFetch } from '../lib/api'
 
 export default function PokemonCollection() {
   const [sets, setSets] = useState([])
@@ -13,8 +12,8 @@ export default function PokemonCollection() {
 
   useEffect(() => {
     Promise.all([
-      fetch(`${API}/api/pokemon/sets`).then(r => r.json()),
-      fetch(`${API}/api/pokemon/owned`).then(r => r.json()),
+      apiFetch('/api/pokemon/sets').then(r => r.json()),
+      apiFetch('/api/pokemon/owned').then(r => r.json()),
     ])
       .then(([setsData, ownedData]) => {
         setSets(Array.isArray(setsData) ? setsData : [])
@@ -51,7 +50,7 @@ export default function PokemonCollection() {
       <div className="set-grid set-grid-top">
         {filtered.map((set) => {
           const count = ownedCountForSet(set.id)
-          const pct = set.total > 0 ? (count / set.total) * 100 : 0
+          const pct   = set.total > 0 ? (count / set.total) * 100 : 0
           return (
             <button
               key={set.id}

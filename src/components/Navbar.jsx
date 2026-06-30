@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
 
 const links = [
   { to: '/',        label: 'Dashboard', icon: '▪' },
@@ -27,6 +28,11 @@ export default function Navbar() {
           </li>
         ))}
       </ul>
+      <div className="sidebar-footer">
+        <button className="logout-btn" onClick={() => supabase.auth.signOut()}>
+          Log out
+        </button>
+      </div>
     </nav>
   )
 }

@@ -1,11 +1,13 @@
 import { Router } from 'express'
 import supabase from '../db.js'
 import { fetchSets, fetchCardsBySet } from '../services/pokemonApi.js'
+import { normalizeCard } from '../services/normalizeCard.js'
+import { requireAuth } from '../middleware/auth.js'
 
 const router = Router()
 
-// GET /api/pokemon/sets
-// Returns all sets. Serves from the pokemon_sets cache; populates it on first call.
+// GET /api/pokemon/sets  — public (no auth)
+// Serves from the pokemon_sets cache; populates it on first call.
 router.get('/sets', async (_req, res) => {
   try {
     const { data: cached, error } = await supabase
@@ -15,11 +17,8 @@ router.get('/sets', async (_req, res) => {
 
     if (error) throw error
 
-    if (cached && cached.length > 0) {
-      return res.json(cached)
-    }
+    if (cached && cached.length > 0) return res.json(cached)
 
-    // Cache is empty — fetch from the Pokemon TCG API and store.
     const sets = await fetchSets()
     const rows = sets.map((s) => ({
       id:           s.id,
@@ -33,7 +32,6 @@ router.get('/sets', async (_req, res) => {
     const { error: upsertError } = await supabase.from('pokemon_sets').upsert(rows)
     if (upsertError) throw upsertError
 
-    // Return newest first, matching the cached query order.
     res.json([...rows].sort((a, b) => (b.release_date ?? '').localeCompare(a.release_date ?? '')))
   } catch (err) {
     console.error('[GET /api/pokemon/sets]', err.message)
@@ -41,15 +39,13 @@ router.get('/sets', async (_req, res) => {
   }
 })
 
-// GET /api/pokemon/sets/:setId
-// Returns metadata for a single set (used by the set detail page).
+// GET /api/pokemon/sets/:setId  — public
 router.get('/sets/:setId', async (req, res) => {
-  const { setId } = req.params
   try {
     const { data, error } = await supabase
       .from('pokemon_sets')
       .select('*')
-      .eq('id', setId)
+      .eq('id', req.params.setId)
       .single()
     if (error) throw error
     res.json(data)
@@ -59,11 +55,10 @@ router.get('/sets/:setId', async (req, res) => {
   }
 })
 
-// GET /api/pokemon/sets/:setId/cards
-// Returns all cards in a set. Caches results in the items table on first call.
+// GET /api/pokemon/sets/:setId/cards  — public
+// Returns all cards in a set, caching them in items on first call.
 router.get('/sets/:setId/cards', async (req, res) => {
   const { setId } = req.params
-
   try {
     const { data: cached, error } = await supabase
       .from('items')
@@ -72,26 +67,10 @@ router.get('/sets/:setId/cards', async (req, res) => {
       .eq('set_name', setId)
 
     if (error) throw error
+    if (cached && cached.length > 0) return res.json(cached)
 
-    if (cached && cached.length > 0) {
-      return res.json(cached)
-    }
-
-    // Cache miss — fetch from the Pokemon TCG API.
     const cards = await fetchCardsBySet(setId)
-    const rows = cards.map((c) => ({
-      category_id: 'pokemon',
-      external_id: c.id,
-      name:        c.name,
-      image_url:   c.images?.small ?? null,
-      set_name:    setId,
-      metadata: {
-        number:    c.number,
-        rarity:    c.rarity ?? null,
-        supertype: c.supertype,
-        types:     c.types ?? [],
-      },
-    }))
+    const rows = cards.map((c) => normalizeCard(c, setId))
 
     const { data: inserted, error: upsertError } = await supabase
       .from('items')
@@ -99,7 +78,6 @@ router.get('/sets/:setId/cards', async (req, res) => {
       .select()
 
     if (upsertError) throw upsertError
-
     res.json(inserted)
   } catch (err) {
     console.error(`[GET /api/pokemon/sets/${req.params.setId}/cards]`, err.message)
@@ -107,19 +85,17 @@ router.get('/sets/:setId/cards', async (req, res) => {
   }
 })
 
-// GET /api/pokemon/owned
-// Returns all items the user currently owns.
-router.get('/owned', async (_req, res) => {
+// GET /api/pokemon/owned  — auth required
+router.get('/owned', requireAuth, async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('ownership_records')
       .select('*, items(*)')
-      .not('items.category_id', 'is', null)
+      .eq('user_id', req.userId)
 
     if (error) throw error
 
-    // Filter to Pokemon only (ownership_records don't have a direct category column).
-    const pokemon = data.filter((r) => r.items?.category_id === 'pokemon')
+    const pokemon = data.filter(r => r.items?.category_id === 'pokemon')
     res.json(pokemon)
   } catch (err) {
     console.error('[GET /api/pokemon/owned]', err.message)
@@ -127,21 +103,19 @@ router.get('/owned', async (_req, res) => {
   }
 })
 
-// POST /api/pokemon/own
-// Mark a card as owned. Body: { item_id, quantity, condition_status }
-router.post('/own', async (req, res) => {
+// POST /api/pokemon/own  — auth required
+// Body: { item_id, quantity?, condition_status? }
+router.post('/own', requireAuth, async (req, res) => {
   const { item_id, quantity = 1, condition_status = 'Near Mint' } = req.body
 
-  if (!item_id) {
-    return res.status(400).json({ error: 'item_id is required' })
-  }
+  if (!item_id) return res.status(400).json({ error: 'item_id is required' })
 
   try {
     const { data, error } = await supabase
       .from('ownership_records')
       .upsert(
-        { item_id, quantity_owned: quantity, condition_status, updated_at: new Date().toISOString() },
-        { onConflict: 'item_id' }
+        { item_id, user_id: req.userId, quantity_owned: quantity, condition_status, updated_at: new Date().toISOString() },
+        { onConflict: 'user_id,item_id' }
       )
       .select()
       .single()
@@ -154,16 +128,14 @@ router.post('/own', async (req, res) => {
   }
 })
 
-// DELETE /api/pokemon/own/:itemId
-// Remove a card from the owned collection.
-router.delete('/own/:itemId', async (req, res) => {
-  const { itemId } = req.params
-
+// DELETE /api/pokemon/own/:itemId  — auth required
+router.delete('/own/:itemId', requireAuth, async (req, res) => {
   try {
     const { error } = await supabase
       .from('ownership_records')
       .delete()
-      .eq('item_id', itemId)
+      .eq('item_id', req.params.itemId)
+      .eq('user_id', req.userId)
 
     if (error) throw error
     res.json({ success: true })

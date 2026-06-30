@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+server/node_modules/
+
+# Environment variables — never commit these
+.env
+.env.local
+.env.*.local
+server/.env
+server/.env.local
+
+# Vite build output
+dist/
+server/dist/
+
+# Vite cache
+.vite/
+node_modules/.vite/
+server/node_modules/.vite/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
